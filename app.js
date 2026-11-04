@@ -138,7 +138,7 @@ function balance(a, upTo = '9999-12-31') {
     if (t.kind === 'despesa' && t.accountId === a.id) { if (a.type === 'cartao' || t.paid) b -= t.amount; }
     if (t.kind === 'transferencia') { if (t.from === a.id) b -= t.amount; if (t.to === a.id) b += t.amount; }
     if (t.kind === 'fatura') { if (t.accountId === a.id) b -= t.amount; if (t.cardId === a.id) b += t.amount; }
-    if (t.kind === 'ajuste' && t.accountId === a.id && !t.sub) b += t.amount; // parte bloqueada não muda o total, só separa
+    if (t.kind === 'ajuste' && t.accountId === a.id) b += t.amount; // partes bloqueadas somam por fora do saldo livre
   }
   return b;
 }
@@ -227,14 +227,14 @@ VIEWS.inicio = () => {
   const mk = mkOf(today()), s = monthSummary(mk);
   const accs = S.accounts.filter(a => !a.archived);
   const livres = accs.filter(spendable), bloqAccs = accs.filter(a => !spendable(a));
-  const blocked = [...accs.filter(spendable).flatMap(a => (a.parts || []).map(p => ({ icon: p.icon, name: p.name, where: a.name, color: a.color, v: partBal(a, p) }))),
-    ...bloqAccs.map(a => ({ icon: a.icon, name: a.name, where: '', color: a.color, v: balance(a) }))];
+  const blocked = [...accs.filter(spendable).flatMap(a => (a.parts || []).map(p => ({ icon: p.icon, name: p.name, where: a.name, color: a.color, v: partBal(a, p), acc: a.id, p: p.id }))),
+    ...bloqAccs.map(a => ({ icon: a.icon, name: a.name, where: '', color: a.color, v: balance(a), acc: a.id, p: '' }))];
   const accRow = a => { const bl = blockedOf(a), fr = freeOf(a);
-    return `<div class="row">${av(a.icon, a.color)}<div class="l">${esc(a.name)}${bl ? `<div class="sub">total ${money(balance(a))} · 🔒 ${money(bl)} bloqueado</div>` : ''}</div><div class="${fr < 0 ? 'neg' : ''}">${money(fr)}</div></div>`; };
+    return `<div class="row">${av(a.icon, a.color)}<div class="l">${esc(a.name)}${bl ? `<div class="sub">+ 🔒 ${money(bl)} bloqueado</div>` : ''}</div><div class="${fr < 0 ? 'neg' : ''}">${money(fr)}</div></div>`; };
   let h = `<div class="card"><h2>Patrimônio total</h2><div class="big">${money(patrimonio())}</div>
     ${blocked.length ? `<div class="sub" style="margin:10px 0 2px;font-weight:600">DISPONÍVEL · ${money(sum(livres, freeOf))}</div>` : ''}${livres.map(accRow).join('')}
     ${blocked.length ? `<div class="sub" style="margin:14px 0 2px;font-weight:600">🔒 BLOQUEADO · ${money(sum(blocked, b => b.v))}</div>
-      ${blocked.map(b => `<div class="row">${av(b.icon, b.color)}<div class="l">${esc(b.name)}${b.where ? `<div class="sub">${esc(b.where)}</div>` : ''}</div><div>${money(b.v)}</div></div>`).join('')}
+      ${blocked.map(b => `<div class="row" data-action="parte-valor" data-id="${b.acc}" data-p="${b.p}">${av(b.icon, b.color)}<div class="l">${esc(b.name)}${b.where ? `<div class="sub">${esc(b.where)}</div>` : ''}</div><div>${money(b.v)} <span class="sub">✎</span></div></div>`).join('')}
       <button class="link" data-action="ajustar">Atualizar saldos bloqueados →</button>` : ''}</div>`;
   h += `<div class="card"><h2>${monthName(mk)}</h2><div class="grid3">
     <div><span class="sub">Receita líquida</span><b class="pos">${money(s.liquido)}</b></div>
@@ -588,8 +588,8 @@ function accountForm(a = null) {
     <div class="two"><div><label>Fecha dia (cartão)</label><input id="f-fecha" type="number" min="1" max="31" value="${a.closeDay || ''}"></div>
     <div><label>Vence dia (cartão)</label><input id="f-vence" type="number" min="1" max="31" value="${a.dueDay || ''}"></div></div>
     ${a.id && a.type === 'bloqueado' ? `<button class="btn full sec" data-action="ajustar" data-id="${a.id}">Atualizar saldo (hoje: ${money(balance(a))})</button>` : ''}
-    ${a.id && spendable(a) ? `<label>Partes bloqueadas desta conta</label><div class="hint" style="margin-top:0">Quanto do saldo desta conta não pode ser usado (ex.: FGTS, Transferência judicial). O saldo da conta continua sendo o total; o app separa livre e bloqueado.</div>
-      ${(a.parts || []).map(p => `<div class="row">${av(p.icon, a.color)}<div class="l">${esc(p.name)}</div><div>${money(partBal(a, p))}</div><button class="icon-btn" data-action="parte-del" data-id="${a.id}" data-p="${p.id}">🗑</button></div>`).join('')}
+    ${a.id && spendable(a) ? `<label>Partes bloqueadas desta conta</label><div class="hint" style="margin-top:0">Valores bloqueados ligados a esta conta (ex.: FGTS, Transferência judicial). Ficam separados: o saldo inicial acima é só o dinheiro livre.</div>
+      ${(a.parts || []).map(p => `<div class="row" data-action="parte-valor" data-id="${a.id}" data-p="${p.id}" data-volta="1">${av(p.icon, a.color)}<div class="l">${esc(p.name)}<div class="sub">toque para informar o valor</div></div><div>${money(partBal(a, p))}</div><button class="icon-btn" data-action="parte-del" data-id="${a.id}" data-p="${p.id}">🗑</button></div>`).join('')}
       <div class="chips"><button class="btn small sec" data-action="parte-add" data-id="${a.id}" data-n="Transferência judicial">+ Transferência judicial</button><button class="btn small sec" data-action="parte-add" data-id="${a.id}" data-n="FGTS">+ FGTS</button><button class="btn small sec" data-action="parte-add" data-id="${a.id}">+ Outra</button></div>` : ''}
     ${a.id ? `<label class="check"><input type="checkbox" id="f-arq" ${a.archived ? 'checked' : ''}>Arquivada (esconde sem apagar o histórico)</label>` : ''}
     <button class="btn full" data-action="salvar-conta">Salvar</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
@@ -634,17 +634,32 @@ const ACTIONS = {
     const bloq = S.accounts.filter(a => !spendable(a) && !a.archived);
     const parts = S.accounts.filter(a => spendable(a) && !a.archived).flatMap(a => (a.parts || []).map(p => ({ a, p })));
     form = { kind: 'ajuste' };
-    openSheet(`<h3>Atualizar saldos bloqueados</h3><p class="hint">Informe quanto está bloqueado hoje em cada conta (consulte o app do FGTS ou do banco). Isso não muda o total da conta, só separa o que é livre. Deixe em branco o que não mudou.</p>
+    openSheet(`<h3>Atualizar saldos bloqueados</h3><p class="hint">Informe o valor bloqueado de hoje em cada item (consulte o app do FGTS ou do banco). Ele fica separado do saldo livre da conta. Deixe em branco o que não mudou.</p>
       ${parts.map(({ a, p }) => `<label>${p.icon} ${esc(p.name)} · ${esc(a.name)} <span class="sub">(hoje: ${money(partBal(a, p))})</span></label><input inputmode="decimal" data-acc="${a.id}" data-sub="${p.id}" class="f-saldo" placeholder="${moneyInput(partBal(a, p)) || '0,00'}">`).join('')}
       ${bloq.map(a => `<label>${a.icon} ${esc(a.name)} <span class="sub">(hoje: ${money(balance(a))})</span></label><input inputmode="decimal" data-acc="${a.id}" class="f-saldo" placeholder="${moneyInput(balance(a)) || '0,00'}">`).join('')}
       ${parts.length + bloq.length ? '' : '<p class="empty">Nenhuma parte bloqueada. Em Ajustes › Contas, toque numa conta e use “+ Parte bloqueada”.</p>'}
       <button class="btn full" data-action="salvar-ajuste">Salvar</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
   },
+  'parte-valor': el => {
+    const a = acc(el.dataset.id), p = el.dataset.p ? a.parts.find(x => x.id === el.dataset.p) : null, cur = p ? partBal(a, p) : balance(a);
+    form = { kind: 'parte-valor', acc: a.id, sub: p?.id, volta: !!el.dataset.volta };
+    openSheet(`<h3>${p ? p.icon + ' ' + esc(p.name) : a.icon + ' ' + esc(a.name)}</h3>${p ? `<div class="sub">${esc(a.name)}</div>` : ''}
+      <label>Valor bloqueado hoje</label><input id="f-valor" class="amount" inputmode="decimal" value="${moneyInput(cur)}" placeholder="0,00">
+      <p class="hint">Fica separado do saldo livre da conta.</p>
+      <button class="btn full" data-action="salvar-parte-valor">Salvar</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
+    setTimeout(() => document.getElementById('f-valor')?.select(), 100);
+  },
+  'salvar-parte-valor': () => {
+    const a = acc(form.acc), p = form.sub ? a.parts.find(x => x.id === form.sub) : null;
+    const diff = Math.round((parseMoney(val('f-valor')) - (p ? partBal(a, p) : balance(a))) * 100) / 100;
+    if (Math.abs(diff) >= 0.005) S.tx.push({ id: uid(), kind: 'ajuste', date: today(), amount: diff, accountId: a.id, ...(p ? { sub: p.id } : {}) });
+    save(); render(); if (form.volta) accountForm(a); else closeSheet(); toast('Valor salvo');
+  },
   'parte-add': el => { const a = acc(el.dataset.id); const n = el.dataset.n || prompt('Nome da parte bloqueada:'); if (!n?.trim()) return;
     if (a.parts.some(p => p.name === n.trim())) return toast('Essa parte já existe nesta conta');
-    a.parts.push({ id: uid(), name: n.trim(), icon: /fgts/i.test(n) ? '🔒' : /judic/i.test(n) ? '⚖️' : '🔒' }); save(); accountForm(a); render(); toast('Parte criada. Informe o valor em “Atualizar saldos bloqueados”.'); },
+    a.parts.push({ id: uid(), name: n.trim(), icon: /fgts/i.test(n) ? '🔒' : /judic/i.test(n) ? '⚖️' : '🔒' }); save(); render(); ACTIONS['parte-valor']({ dataset: { id: a.id, p: a.parts.at(-1).id, volta: '1' } }); },
   'parte-del': el => { const a = acc(el.dataset.id), p = a.parts.find(x => x.id === el.dataset.p);
-    if (!confirm(`Remover "${p.name}" desta conta? O valor volta a contar como livre.`)) return;
+    if (!confirm(`Remover "${p.name}" desta conta? O valor bloqueado registrado nela será apagado.`)) return;
     S.tx = S.tx.filter(t => !(t.kind === 'ajuste' && t.sub === p.id)); a.parts = a.parts.filter(x => x !== p); save(); accountForm(a); render(); },
   'salvar-ajuste': () => {
     let n = 0;

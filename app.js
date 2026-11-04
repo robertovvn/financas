@@ -57,9 +57,11 @@ const TYPE_ICONS = { 'Financiamento':'🏠','Conta de luz':'💡','Conta de águ
   'Petiscos':'🦴','Ração':'🥣','Brinquedos':'🧸','Veterinário':'🩺','Pet shop':'🛁','Academia':'🏋️','Pelada':'⚽','Táxi':'🚕','Uber':'🚘','99 táxi':'🚖','Ônibus':'🚌','Gasolina':'⛽','Mecânico':'🔧',
   'Lava jato':'🧽','Troca de óleo':'🛢️','Roupas':'👕','Calçados':'👟','Passagem':'🎫','Acomodação':'🏨','Aporte':'📈','INSS':'🏛️','Contador':'🧮','Tarifas bancárias':'🏦','Cursos':'🎓','Livros':'📖','Presentes':'🎁','Doações':'🤝' };
 const INC_ICONS = { 'Salário':'💼','VR':'🍴','VT':'🚌','Freela':'💻','Investimentos':'📈' };
-const ACC_ICONS = { corrente:'🏦', dinheiro:'💵', cartao:'💳' };
+const ACC_ICONS = { corrente:'🏦', dinheiro:'💵', cartao:'💳', bloqueado:'🔒' };
+const ACC_TYPES = { corrente: 'Conta', dinheiro: 'Dinheiro', cartao: 'Cartão de crédito', bloqueado: 'Saldo bloqueado' };
+const spendable = a => a.type !== 'bloqueado';
 const ACC_COLORS = { sicoob:'#0b7a5c', dinheiro:'#16a34a', nubank:'#820ad1' };
-const ICON_CHOICES = ['🏠','🍽️','🛒','☕','🍛','🍔','🍕','🍺','🍻','🎉','🎬','🎤','🎮','🃏','📺','▶️','📱','☁️','💻','💊','🦷','🩺','🏥','🐾','🦴','🐶','🐱','⚽','🏋️','🚗','🚕','🚌','⛽','🔧','✈️','🏨','🎫','👕','👟','👜','💇','💄','📚','🎓','🎁','🤝','🧾','🏛️','🧮','🏦','💳','💵','💰','💼','📈','🪙','💡','🚿','🌐','🧹','🛠️','👶','❤️','⭐','📦','🏷️'];
+const ICON_CHOICES = ['🔒','🏠','🍽️','🛒','☕','🍛','🍔','🍕','🍺','🍻','🎉','🎬','🎤','🎮','🃏','📺','▶️','📱','☁️','💻','💊','🦷','🩺','🏥','🐾','🦴','🐶','🐱','⚽','🏋️','🚗','🚕','🚌','⛽','🔧','✈️','🏨','🎫','👕','👟','👜','💇','💄','📚','🎓','🎁','🤝','🧾','🏛️','🧮','🏦','💳','💵','💰','💼','📈','🪙','💡','🚿','🌐','🧹','🛠️','👶','❤️','⭐','📦','🏷️'];
 function migrate() {
   for (const a of S.areas) { a.icon = a.icon || AREA_ICONS[a.name] || '🏷️'; for (const t of a.types) if (t.icon === undefined) t.icon = TYPE_ICONS[t.name] || ''; }
   for (const a of S.accounts) { a.icon = a.icon || ACC_ICONS[a.type] || '🏦'; a.color = a.color || ACC_COLORS[a.id] || '#64748b'; }
@@ -97,6 +99,7 @@ const fmtDate = d => `${d.slice(8)}/${d.slice(5, 7)}`;
 function parseMoney(s) {
   s = String(s).trim().replace(/[R$\s]/g, '');
   if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ''); // 10.000 = dez mil
   const v = parseFloat(s); return isNaN(v) ? 0 : Math.round(v * 100) / 100;
 }
 const moneyInput = v => v ? String(v.toFixed(2)).replace('.', ',') : '';
@@ -128,6 +131,7 @@ function balance(a, upTo = '9999-12-31') {
     if (t.kind === 'despesa' && t.accountId === a.id) { if (a.type === 'cartao' || t.paid) b -= t.amount; }
     if (t.kind === 'transferencia') { if (t.from === a.id) b -= t.amount; if (t.to === a.id) b += t.amount; }
     if (t.kind === 'fatura') { if (t.accountId === a.id) b -= t.amount; if (t.cardId === a.id) b += t.amount; }
+    if (t.kind === 'ajuste' && t.accountId === a.id) b += t.amount;
   }
   return b;
 }
@@ -191,6 +195,11 @@ function txRow(t) {
     return `<div class="row" data-action="editar" data-id="${t.id}">${av('🔄', '#64748b')}<div class="l"><div class="t">${esc(t.desc || 'Transferência')}</div>
       <div class="sub">${fmtDate(t.date)} · ${esc(acc(t.from)?.name)} → ${esc(acc(t.to)?.name)}</div></div><div class="sub">${money(t.amount)}</div></div>`;
   }
+  if (t.kind === 'ajuste') {
+    const a = acc(t.accountId);
+    return `<div class="row" data-action="editar" data-id="${t.id}">${av(a?.icon || '🔒', a?.color || '#64748b')}<div class="l"><div class="t">Atualização de saldo</div>
+      <div class="sub">${fmtDate(t.date)} · ${accTag(a)}</div></div><div class="sub ${t.amount < 0 ? 'neg' : 'pos'}">${t.amount < 0 ? '' : '+'}${money(t.amount)}</div></div>`;
+  }
   return `<div class="row" data-action="editar" data-id="${t.id}">${av('✅', acc(t.cardId)?.color || '#8b5cf6')}<div class="l"><div class="t">Pagamento de fatura</div>
     <div class="sub">${fmtDate(t.date)} · ${esc(acc(t.cardId)?.name)} · de ${esc(acc(t.accountId)?.name)}</div></div><div class="sub">${money(t.amount)}</div></div>`;
 }
@@ -207,8 +216,12 @@ function billsOf(card) {
 VIEWS.inicio = () => {
   const mk = mkOf(today()), s = monthSummary(mk);
   const accs = S.accounts.filter(a => !a.archived);
-  let h = `<div class="card"><h2>Patrimônio</h2><div class="big">${money(patrimonio())}</div>
-    ${accs.map(a => `<div class="row">${av(a.icon, a.color)}<div class="l">${esc(a.name)}</div><div class="${balance(a) < 0 ? 'neg' : ''}">${money(balance(a))}</div></div>`).join('')}</div>`;
+  const accRow = a => `<div class="row">${av(a.icon, a.color)}<div class="l">${esc(a.name)}</div><div class="${balance(a) < 0 ? 'neg' : ''}">${money(balance(a))}</div></div>`;
+  const livres = accs.filter(spendable), bloq = accs.filter(a => !spendable(a));
+  let h = `<div class="card"><h2>Patrimônio total</h2><div class="big">${money(patrimonio())}</div>
+    ${bloq.length ? `<div class="sub" style="margin:10px 0 2px;font-weight:600">DISPONÍVEL · ${money(sum(livres, a => balance(a)))}</div>` : ''}${livres.map(accRow).join('')}
+    ${bloq.length ? `<div class="sub" style="margin:14px 0 2px;font-weight:600">🔒 BLOQUEADO · ${money(sum(bloq, a => balance(a)))}</div>${bloq.map(accRow).join('')}
+      <button class="link" data-action="ajustar" data-id="${bloq[0].id}">Atualizar saldo${bloq.length > 1 ? 's' : ''} →</button>` : ''}</div>`;
   h += `<div class="card"><h2>${monthName(mk)}</h2><div class="grid3">
     <div><span class="sub">Receita líquida</span><b class="pos">${money(s.liquido)}</b></div>
     <div><span class="sub">Despesas</span><b class="neg">${money(s.despesas)}</b></div>
@@ -352,7 +365,7 @@ VIEWS.ajustes = () => {
     <div class="chips">${a.types.map(t => `<span class="chip" data-action="tipo-edit" data-id="${a.id}" data-t="${t.id}">${t.icon ? t.icon + ' ' : ''}${esc(t.name)}<button data-action="tipo-del" data-id="${a.id}" data-t="${t.id}">×</button></span>`).join('')}
       <button class="btn small sec" data-action="tipo-add" data-id="${a.id}">+ tipo</button></div></div>`).join('');
   const accs = S.accounts.map(a => `<div class="row" data-action="conta" data-id="${a.id}">${av(a.icon, a.color)}<div class="l"><div>${esc(a.name)}${a.archived ? ' <span class="badge">arquivada</span>' : ''}</div>
-    <div class="sub">${{ corrente: 'Conta', dinheiro: 'Dinheiro', cartao: 'Cartão de crédito' }[a.type]} · saldo inicial ${money(a.initial)}</div></div><span class="sub">›</span></div>`).join('');
+    <div class="sub">${ACC_TYPES[a.type]} · saldo inicial ${money(a.initial)}</div></div><span class="sub">›</span></div>`).join('');
   const inc = S.incomeCats.map(c => `<div class="row"><span data-action="inc-edit" data-id="${c.id}" style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer">${av(c.icon, '#16a34a')}${esc(c.name)} <span class="sub">✎</span></span>
     <label class="check" style="margin:0;font-size:13px"><input type="checkbox" data-change="inc-tax" data-id="${c.id}" ${c.taxed ? 'checked' : ''}>com nota</label>
     <button class="icon-btn" data-action="inc-del" data-id="${c.id}">🗑</button></div>`).join('');
@@ -391,7 +404,7 @@ function txForm(kind, t = null) {
   if (kind === 'despesa') {
     const aId = t.areaId || S.areas[1]?.id;
     const accId = t.accountId || 'nubank';
-    h += `<div><label>Pago com</label><select id="f-conta" data-change="conta-form">${accs.filter(a => a.type !== 'x').map(a => opt(a.id, a.name, accId)).join('')}</select></div></div>
+    h += `<div><label>Pago com</label><select id="f-conta" data-change="conta-form">${accs.filter(spendable).map(a => opt(a.id, a.name, accId)).join('')}</select></div></div>
       <label>Descrição</label><input id="f-desc" placeholder="Ex.: Ifood, Niver Angélica" value="${esc(t.desc)}">
       <div class="two"><div><label>Área</label><select id="f-area" data-change="area-form">${S.areas.map(a => opt(a.id, a.name, aId)).join('')}</select></div>
       <div><label>Tipo</label><select id="f-tipo">${typeOpts(aId, t.typeId)}</select></div></div>
@@ -400,13 +413,13 @@ function txForm(kind, t = null) {
       <label class="check" id="pago-box"><input type="checkbox" id="f-pago" ${t.paid ?? true ? 'checked' : ''}>Já está pago</label>`;
   } else if (kind === 'receita') {
     const cId = t.catId || S.incomeCats[0]?.id;
-    h += `<div><label>Entrou em</label><select id="f-conta">${accs.filter(a => a.type !== 'cartao').map(a => opt(a.id, a.name, t.accountId || 'sicoob')).join('')}</select></div></div>
+    h += `<div><label>Entrou em</label><select id="f-conta">${accs.filter(a => a.type !== 'cartao' && spendable(a)).map(a => opt(a.id, a.name, t.accountId || 'sicoob')).join('')}</select></div></div>
       <label>Tipo</label><select id="f-cat" data-change="cat-form">${S.incomeCats.map(c => opt(c.id, c.name, cId)).join('')}</select>
       <label>Descrição</label><input id="f-desc" placeholder="Opcional" value="${esc(t.desc)}">
       <label class="check"><input type="checkbox" id="f-nota" data-change="preview" ${(t.id ? t.gross !== t.net : incomeCat(cId)?.taxed) ? 'checked' : ''}>Com nota (descontar ${taxRate().toFixed(2).replace('.', ',')}% de impostos)</label>
       <div class="hint" id="f-prev"></div>`;
   } else {
-    const nb = accs.filter(a => a.type !== 'cartao');
+    const nb = accs.filter(a => a.type !== 'cartao' && spendable(a));
     h += `<div></div></div><div class="two"><div><label>De</label><select id="f-de">${nb.map(a => opt(a.id, a.name, t.from || 'sicoob')).join('')}</select></div>
       <div><label>Para</label><select id="f-para">${nb.map(a => opt(a.id, a.name, t.to || 'dinheiro')).join('')}</select></div></div>
       <label>Descrição</label><input id="f-desc" placeholder="Ex.: Saque" value="${esc(t.desc)}">`;
@@ -462,7 +475,7 @@ function payForm(cardId, bk) {
   const card = acc(cardId), b = billsOf(card).find(x => x.key === bk);
   form = { kind: 'pagar', cardId, bk };
   openSheet(`<h3>Pagar fatura de ${monthName(bk)}</h3><div class="big">${money(b.open)}</div>
-    <label>Pagar com</label><select id="f-conta">${S.accounts.filter(a => a.type !== 'cartao' && !a.archived).map(a => opt(a.id, a.name, 'sicoob')).join('')}</select>
+    <label>Pagar com</label><select id="f-conta">${S.accounts.filter(a => a.type !== 'cartao' && spendable(a) && !a.archived).map(a => opt(a.id, a.name, 'sicoob')).join('')}</select>
     <label>Data do pagamento</label><input id="f-data" type="date" value="${today()}">
     <button class="btn full" data-action="confirmar-pag">Confirmar pagamento</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
 }
@@ -482,7 +495,7 @@ function fixedForm(f = null) {
     <div><label>Dia do mês</label><input id="f-dia" type="number" min="1" max="31" value="${f.day || 10}"></div></div>
     <div class="two"><div><label>Área</label><select id="f-area" data-change="area-form">${S.areas.map(a => opt(a.id, a.name, aId)).join('')}</select></div>
     <div><label>Tipo</label><select id="f-tipo">${typeOpts(aId, f.typeId)}</select></div></div>
-    <label>Pago com</label><select id="f-conta">${S.accounts.filter(a => !a.archived).map(a => opt(a.id, a.name, f.accountId || 'nubank')).join('')}</select>
+    <label>Pago com</label><select id="f-conta">${S.accounts.filter(a => !a.archived && spendable(a)).map(a => opt(a.id, a.name, f.accountId || 'nubank')).join('')}</select>
     ${f.id ? `<label class="check"><input type="checkbox" id="f-ativo" ${f.active ? 'checked' : ''}>Ativo (desmarque para pausar)</label>` : ''}
     <button class="btn full" data-action="salvar-fixo">Salvar</button>
     ${f.id ? '<button class="btn full danger" data-action="excluir-fixo">Excluir (lançamentos passados ficam)</button>' : ''}
@@ -556,10 +569,11 @@ function accountForm(a = null) {
   openSheet(`<h3>${a.id ? 'Editar conta' : 'Nova conta'}</h3>
     <label>Nome</label><input id="f-nome" value="${esc(a.name)}">
     ${lookFields(a.icon || ACC_ICONS[a.type], a.color || '#64748b')}
-    <label>Tipo</label><select id="f-tipo" ${a.id ? 'disabled' : ''}>${opt('corrente', 'Conta bancária', a.type)}${opt('dinheiro', 'Dinheiro', a.type)}${opt('cartao', 'Cartão de crédito', a.type)}</select>
+    <label>Tipo</label><select id="f-tipo" ${a.id ? 'disabled' : ''}>${opt('corrente', 'Conta bancária', a.type)}${opt('dinheiro', 'Dinheiro', a.type)}${opt('cartao', 'Cartão de crédito', a.type)}${opt('bloqueado', 'Saldo bloqueado (FGTS, judicial…)', a.type)}</select>
     <label>${a.type === 'cartao' ? 'Saldo inicial (use negativo se já houver fatura)' : 'Saldo inicial'}</label><input id="f-ini" inputmode="decimal" value="${a.initial ? String(a.initial).replace('.', ',') : ''}" placeholder="0,00">
     <div class="two"><div><label>Fecha dia (cartão)</label><input id="f-fecha" type="number" min="1" max="31" value="${a.closeDay || ''}"></div>
     <div><label>Vence dia (cartão)</label><input id="f-vence" type="number" min="1" max="31" value="${a.dueDay || ''}"></div></div>
+    ${a.id && a.type === 'bloqueado' ? `<button class="btn full sec" data-action="ajustar" data-id="${a.id}">Atualizar saldo (hoje: ${money(balance(a))})</button>` : ''}
     ${a.id ? `<label class="check"><input type="checkbox" id="f-arq" ${a.archived ? 'checked' : ''}>Arquivada (esconde sem apagar o histórico)</label>` : ''}
     <button class="btn full" data-action="salvar-conta">Salvar</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
 }
@@ -569,7 +583,8 @@ const ACTIONS = {
   fechar: closeSheet,
   novo: () => txForm('despesa'),
   'form-kind': el => txForm(el.dataset.k),
-  editar: el => { const t = S.tx.find(x => x.id === el.dataset.id); if (t.kind === 'fatura') { if (confirm('Desfazer este pagamento de fatura?')) { S.tx.filter(x => x.kind === 'despesa' && x.accountId === t.cardId && billKey(x) === t.bill).forEach(x => x.paid = false); S.tx = S.tx.filter(x => x !== t); save(); render(); } return; } txForm(t.kind, t); },
+  editar: el => { const t = S.tx.find(x => x.id === el.dataset.id);
+    if (t.kind === 'ajuste') { if (confirm('Desfazer esta atualização de saldo?')) { S.tx = S.tx.filter(x => x !== t); save(); render(); } return; } if (t.kind === 'fatura') { if (confirm('Desfazer este pagamento de fatura?')) { S.tx.filter(x => x.kind === 'despesa' && x.accountId === t.cardId && billKey(x) === t.bill).forEach(x => x.paid = false); S.tx = S.tx.filter(x => x !== t); save(); render(); } return; } txForm(t.kind, t); },
   'salvar-tx': saveTx,
   'excluir-tx': () => { if (!confirm('Excluir este lançamento?')) return; S.tx = S.tx.filter(t => t.id !== form.id); save(); closeSheet(); render(); },
   'excluir-grupo': () => { const g = S.tx.find(t => t.id === form.id).inst.group; if (!confirm('Excluir todas as parcelas?')) return; S.tx = S.tx.filter(t => t.inst?.group !== g); save(); closeSheet(); render(); },
@@ -594,10 +609,24 @@ const ACTIONS = {
   'excluir-invest': () => { if (!confirm('Excluir investimento?')) return; S.investments = S.investments.filter(i => i.id !== form.id); save(); closeSheet(); render(); },
   conta: el => accountForm(acc(el.dataset.id)),
   'salvar-conta': () => { const name = val('f-nome').trim(); if (!name) return toast('Dê um nome');
-    const o = { name, icon: val('f-icon') || '🏦', color: val('f-cor'), initial: parseMoney(val('f-ini')) * (String(val('f-ini')).trim().startsWith('-') ? -1 : 1), closeDay: parseInt(val('f-fecha')) || undefined, dueDay: parseInt(val('f-vence')) || undefined };
+    const o = { name, icon: val('f-icon') || '🏦', color: val('f-cor'), initial: parseMoney(val('f-ini')), closeDay: parseInt(val('f-fecha')) || undefined, dueDay: parseInt(val('f-vence')) || undefined };
     if (form.id) Object.assign(acc(form.id), o, { archived: document.getElementById('f-arq').checked });
-    else { const type = val('f-tipo'); if (type === 'cartao' && (!o.closeDay || !o.dueDay)) return toast('Informe os dias de fechamento e vencimento'); S.accounts.push({ id: uid(), type, ...o }); }
+    else { const type = val('f-tipo'); if (o.icon === ACC_ICONS.corrente && type !== 'corrente') o.icon = ACC_ICONS[type]; if (type === 'cartao' && (!o.closeDay || !o.dueDay)) return toast('Informe os dias de fechamento e vencimento'); S.accounts.push({ id: uid(), type, ...o }); }
     save(); closeSheet(); render(); },
+  ajustar: el => {
+    const bloq = S.accounts.filter(a => !spendable(a) && !a.archived);
+    form = { kind: 'ajuste' };
+    openSheet(`<h3>Atualizar saldo bloqueado</h3><p class="hint">Consulte o app do FGTS (ou o processo) e informe o saldo de hoje. O app registra a diferença.</p>
+      ${bloq.map(a => `<label>${a.icon} ${esc(a.name)} <span class="sub">(hoje no app: ${money(balance(a))})</span></label><input inputmode="decimal" data-acc="${a.id}" class="f-saldo" placeholder="${moneyInput(balance(a)) || '0,00'}">`).join('')}
+      <button class="btn full" data-action="salvar-ajuste">Salvar</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
+  },
+  'salvar-ajuste': () => {
+    let n = 0;
+    document.querySelectorAll('.f-saldo').forEach(i => { if (!i.value.trim()) return; const a = acc(i.dataset.acc);
+      const diff = Math.round((parseMoney(i.value) - balance(a)) * 100) / 100; if (Math.abs(diff) < 0.005) return;
+      S.tx.push({ id: uid(), kind: 'ajuste', date: today(), amount: diff, accountId: a.id }); n++; });
+    save(); closeSheet(); render(); toast(n ? 'Saldo atualizado' : 'Nada mudou');
+  },
   'pick-icon': el => { document.getElementById('f-icon').value = el.dataset.v; document.querySelectorAll('.icongrid .on').forEach(b => b.classList.remove('on')); el.classList.add('on'); updLook(); },
   'pick-cor': el => { document.getElementById('f-cor').value = el.dataset.v; document.querySelectorAll('.swatches .on').forEach(b => b.classList.remove('on')); el.classList.add('on'); updLook(); },
   'area-edit': el => itemForm('area', el.dataset.id),
@@ -628,6 +657,7 @@ const ACTIONS = {
       if (t.kind === 'despesa') rows.push([t.date, 'Despesa', t.amount, t.amount, area(t.areaId)?.name, typeName(t.areaId, t.typeId), acc(t.accountId)?.name, t.paid ? 'Sim' : 'Não', t.inst ? `${t.inst.n}/${t.inst.total}` : '', t.desc]);
       else if (t.kind === 'receita') rows.push([t.date, 'Receita', t.gross, t.net, incomeCat(t.catId)?.name, '', acc(t.accountId)?.name, 'Sim', '', t.desc]);
       else if (t.kind === 'transferencia') rows.push([t.date, 'Transferência', t.amount, t.amount, '', '', `${acc(t.from)?.name} → ${acc(t.to)?.name}`, 'Sim', '', t.desc]);
+      else if (t.kind === 'ajuste') rows.push([t.date, 'Atualização de saldo', t.amount, t.amount, '', '', acc(t.accountId)?.name, 'Sim', '', '']);
       else rows.push([t.date, 'Pagamento de fatura', t.amount, t.amount, '', '', acc(t.accountId)?.name, 'Sim', '', acc(t.cardId)?.name]);
     }
     const csv = rows.map(r => r.map(c => typeof c === 'number' ? String(c).replace('.', ',') : `"${String(c ?? '').replace(/"/g, '""')}"`).join(';')).join('\n');

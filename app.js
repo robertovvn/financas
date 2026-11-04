@@ -61,11 +61,17 @@ const ACC_ICONS = { corrente:'🏦', dinheiro:'💵', cartao:'💳', bloqueado:'
 const ACC_TYPES = { corrente: 'Conta', dinheiro: 'Dinheiro', cartao: 'Cartão de crédito', bloqueado: 'Saldo bloqueado' };
 const spendable = a => a.type !== 'bloqueado';
 const ACC_COLORS = { sicoob:'#0b7a5c', dinheiro:'#16a34a', nubank:'#820ad1' };
-const ICON_CHOICES = ['🔒','🏠','🍽️','🛒','☕','🍛','🍔','🍕','🍺','🍻','🎉','🎬','🎤','🎮','🃏','📺','▶️','📱','☁️','💻','💊','🦷','🩺','🏥','🐾','🦴','🐶','🐱','⚽','🏋️','🚗','🚕','🚌','⛽','🔧','✈️','🏨','🎫','👕','👟','👜','💇','💄','📚','🎓','🎁','🤝','🧾','🏛️','🧮','🏦','💳','💵','💰','💼','📈','🪙','💡','🚿','🌐','🧹','🛠️','👶','❤️','⭐','📦','🏷️'];
+const ICON_CHOICES = ['🔒','⚖️','🏠','🍽️','🛒','☕','🍛','🍔','🍕','🍺','🍻','🎉','🎬','🎤','🎮','🃏','📺','▶️','📱','☁️','💻','💊','🦷','🩺','🏥','🐾','🦴','🐶','🐱','⚽','🏋️','🚗','🚕','🚌','⛽','🔧','✈️','🏨','🎫','👕','👟','👜','💇','💄','📚','🎓','🎁','🤝','🧾','🏛️','🧮','🏦','💳','💵','💰','💼','📈','🪙','💡','🚿','🌐','🧹','🛠️','👶','❤️','⭐','📦','🏷️'];
 function migrate() {
   for (const a of S.areas) { a.icon = a.icon || AREA_ICONS[a.name] || '🏷️'; for (const t of a.types) if (t.icon === undefined) t.icon = TYPE_ICONS[t.name] || ''; }
   for (const a of S.accounts) { a.icon = a.icon || ACC_ICONS[a.type] || '🏦'; a.color = a.color || ACC_COLORS[a.id] || '#64748b'; }
   for (const c of S.incomeCats) c.icon = c.icon || INC_ICONS[c.name] || '💰';
+  // Saldos bloqueados separados: FGTS e Transferência judicial (criados uma vez, sem duplicar os que já existirem)
+  if (!S.seededBlocked) {
+    if (!S.accounts.some(a => /fgts/i.test(a.name))) S.accounts.push({ id: 'fgts', name: 'FGTS', type: 'bloqueado', initial: 0, icon: '🔒', color: '#005ca9' });
+    if (!S.accounts.some(a => /judic/i.test(a.name))) S.accounts.push({ id: 'judicial', name: 'Transferência judicial', type: 'bloqueado', initial: 0, icon: '⚖️', color: '#a16207' });
+    S.seededBlocked = true;
+  }
 }
 
 let S;
@@ -74,7 +80,7 @@ function load() {
   if (!S || !S.version) S = defaults();
   for (const k of ['tx','fixed','goals','investments']) S[k] = S[k] || [];
   S.generated = S.generated || {};
-  migrate();
+  migrate(); save();
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }

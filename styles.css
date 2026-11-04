@@ -89,3 +89,7 @@ input[type=checkbox]{width:auto;margin-right:8px}
 .icongrid button{font-size:22px;height:40px;border:1px solid transparent;border-radius:10px;background:var(--bg);cursor:pointer;padding:0}
 .icongrid button.on{border-color:var(--accent);background:var(--accent-soft)}
 .chip{cursor:pointer}
+.box{background:var(--bg);border-radius:12px;padding:12px;margin-top:12px}
+.box input{background:var(--card)}
+.part{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.part .l{flex:1;min-width:0}.part input{width:120px;text-align:right}

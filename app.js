@@ -58,6 +58,7 @@ const TYPE_ICONS = { 'Financiamento':'🏠','Conta de luz':'💡','Conta de águ
   'Lava jato':'🧽','Troca de óleo':'🛢️','Roupas':'👕','Calçados':'👟','Passagem':'🎫','Acomodação':'🏨','Aporte':'📈','INSS':'🏛️','Contador':'🧮','Tarifas bancárias':'🏦','Cursos':'🎓','Livros':'📖','Presentes':'🎁','Doações':'🤝' };
 const INC_ICONS = { 'Salário':'💼','VR':'🍴','VT':'🚌','Freela':'💻','Investimentos':'📈' };
 const ACC_ICONS = { corrente:'🏦', dinheiro:'💵', cartao:'💳', bloqueado:'🔒' };
+const APP_VERSION = '7';
 const ACC_TYPES = { corrente: 'Conta', dinheiro: 'Dinheiro', cartao: 'Cartão de crédito', bloqueado: 'Saldo bloqueado' };
 const spendable = a => a.type !== 'bloqueado';
 const ACC_COLORS = { sicoob:'#0b7a5c', dinheiro:'#16a34a', nubank:'#820ad1' };
@@ -397,7 +398,8 @@ VIEWS.ajustes = () => {
     <button class="btn full" data-action="exportar">Baixar backup (JSON)</button>
     <button class="btn full sec" data-action="csv">Exportar lançamentos (planilha CSV)</button>
     <button class="btn full sec" data-action="importar">Restaurar backup</button>
-    <button class="btn full danger" data-action="zerar">Apagar todos os dados</button></div>`;
+    <button class="btn full danger" data-action="zerar">Apagar todos os dados</button></div>
+  <p class="hint" style="text-align:center">Versão ${APP_VERSION}</p>`;
 };
 
 /* ===================== Formulários ===================== */
@@ -580,19 +582,33 @@ function itemForm(kind, aId, tId) {
 
 function accountForm(a = null) {
   form = { kind: 'conta', id: a?.id }; a = a || { type: 'corrente' };
+  const card = a.type === 'cartao';
+  const partRow = p => `<div class="part">${av(p.icon, a.color)}<div class="l"><b>${esc(p.name)}</b><div class="sub">valor bloqueado, separado do livre</div></div>
+      <input inputmode="decimal" class="f-parte" data-p="${p.id}" value="${moneyInput(partBal(a, p))}" placeholder="0,00">
+      <button class="icon-btn" data-action="parte-del" data-id="${a.id}" data-p="${p.id}">🗑</button></div>`;
   openSheet(`<h3>${a.id ? 'Editar conta' : 'Nova conta'}</h3>
     <label>Nome</label><input id="f-nome" value="${esc(a.name)}">
-    ${lookFields(a.icon || ACC_ICONS[a.type], a.color || '#64748b')}
     <label>Tipo</label><select id="f-tipo" ${a.id ? 'disabled' : ''}>${opt('corrente', 'Conta bancária', a.type)}${opt('dinheiro', 'Dinheiro', a.type)}${opt('cartao', 'Cartão de crédito', a.type)}${opt('bloqueado', 'Saldo bloqueado (FGTS, judicial…)', a.type)}</select>
-    <label>${a.type === 'cartao' ? 'Saldo inicial (use negativo se já houver fatura)' : 'Saldo inicial'}</label><input id="f-ini" inputmode="decimal" value="${a.initial ? String(a.initial).replace('.', ',') : ''}" placeholder="0,00">
-    <div class="two"><div><label>Fecha dia (cartão)</label><input id="f-fecha" type="number" min="1" max="31" value="${a.closeDay || ''}"></div>
-    <div><label>Vence dia (cartão)</label><input id="f-vence" type="number" min="1" max="31" value="${a.dueDay || ''}"></div></div>
+    <div class="box"><label style="margin-top:0">${card ? 'Saldo inicial (use negativo se já houver fatura)' : a.type === 'bloqueado' ? 'Saldo inicial' : '💵 Saldo livre inicial'}</label>
+      <input id="f-ini" inputmode="decimal" value="${a.initial ? String(a.initial).replace('.', ',') : ''}" placeholder="0,00">
+      ${a.id && !card && spendable(a) ? `<div class="sub" style="margin-top:6px">Saldo livre hoje: <b>${money(freeOf(a))}</b></div>` : ''}</div>
+    ${a.id && spendable(a) && !card ? `<div class="box"><label style="margin-top:0">🔒 Valores bloqueados (cada um independente)</label>
+      ${(a.parts || []).map(partRow).join('') || '<div class="sub">Nenhum. Adicione abaixo, se houver.</div>'}
+      <div class="chips"><button class="btn small sec" data-action="parte-add" data-id="${a.id}" data-n="FGTS">+ FGTS</button><button class="btn small sec" data-action="parte-add" data-id="${a.id}" data-n="Transferência judicial">+ Transferência judicial</button><button class="btn small sec" data-action="parte-add" data-id="${a.id}">+ Outro</button></div></div>` : ''}
+    ${card || !a.id ? `<div class="two"><div><label>Fecha dia (cartão)</label><input id="f-fecha" type="number" min="1" max="31" value="${a.closeDay || ''}"></div>
+    <div><label>Vence dia (cartão)</label><input id="f-vence" type="number" min="1" max="31" value="${a.dueDay || ''}"></div></div>` : ''}
     ${a.id && a.type === 'bloqueado' ? `<button class="btn full sec" data-action="ajustar" data-id="${a.id}">Atualizar saldo (hoje: ${money(balance(a))})</button>` : ''}
-    ${a.id && spendable(a) ? `<label>Partes bloqueadas desta conta</label><div class="hint" style="margin-top:0">Valores bloqueados ligados a esta conta (ex.: FGTS, Transferência judicial). Ficam separados: o saldo inicial acima é só o dinheiro livre.</div>
-      ${(a.parts || []).map(p => `<div class="row" data-action="parte-valor" data-id="${a.id}" data-p="${p.id}" data-volta="1">${av(p.icon, a.color)}<div class="l">${esc(p.name)}<div class="sub">toque para informar o valor</div></div><div>${money(partBal(a, p))}</div><button class="icon-btn" data-action="parte-del" data-id="${a.id}" data-p="${p.id}">🗑</button></div>`).join('')}
-      <div class="chips"><button class="btn small sec" data-action="parte-add" data-id="${a.id}" data-n="Transferência judicial">+ Transferência judicial</button><button class="btn small sec" data-action="parte-add" data-id="${a.id}" data-n="FGTS">+ FGTS</button><button class="btn small sec" data-action="parte-add" data-id="${a.id}">+ Outra</button></div>` : ''}
+    ${lookFields(a.icon || ACC_ICONS[a.type], a.color || '#64748b')}
     ${a.id ? `<label class="check"><input type="checkbox" id="f-arq" ${a.archived ? 'checked' : ''}>Arquivada (esconde sem apagar o histórico)</label>` : ''}
     <button class="btn full" data-action="salvar-conta">Salvar</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
+}
+// Grava os valores bloqueados digitados no formulário da conta
+function saveParts(a) {
+  document.querySelectorAll('.f-parte').forEach(i => {
+    const p = a.parts.find(x => x.id === i.dataset.p); if (!p) return;
+    const diff = Math.round((parseMoney(i.value) - partBal(a, p)) * 100) / 100;
+    if (Math.abs(diff) >= 0.005) S.tx.push({ id: uid(), kind: 'ajuste', date: today(), amount: diff, accountId: a.id, sub: p.id });
+  });
 }
 
 /* ===================== Ações ===================== */
@@ -626,8 +642,8 @@ const ACTIONS = {
   'excluir-invest': () => { if (!confirm('Excluir investimento?')) return; S.investments = S.investments.filter(i => i.id !== form.id); save(); closeSheet(); render(); },
   conta: el => accountForm(acc(el.dataset.id)),
   'salvar-conta': () => { const name = val('f-nome').trim(); if (!name) return toast('Dê um nome');
-    const o = { name, icon: val('f-icon') || '🏦', color: val('f-cor'), initial: parseMoney(val('f-ini')), closeDay: parseInt(val('f-fecha')) || undefined, dueDay: parseInt(val('f-vence')) || undefined };
-    if (form.id) Object.assign(acc(form.id), o, { archived: document.getElementById('f-arq').checked });
+    const o = { name, icon: val('f-icon') || '🏦', color: val('f-cor'), initial: parseMoney(val('f-ini')), closeDay: parseInt(val('f-fecha')) || acc(form.id)?.closeDay || undefined, dueDay: parseInt(val('f-vence')) || acc(form.id)?.dueDay || undefined };
+    if (form.id) { const a = acc(form.id); Object.assign(a, o, { archived: document.getElementById('f-arq').checked }); saveParts(a); }
     else { const type = val('f-tipo'); if (o.icon === ACC_ICONS.corrente && type !== 'corrente') o.icon = ACC_ICONS[type]; if (type === 'cartao' && (!o.closeDay || !o.dueDay)) return toast('Informe os dias de fechamento e vencimento'); S.accounts.push({ id: uid(), type, parts: [], ...o }); }
     save(); closeSheet(); render(); },
   ajustar: el => {
@@ -657,10 +673,10 @@ const ACTIONS = {
   },
   'parte-add': el => { const a = acc(el.dataset.id); const n = el.dataset.n || prompt('Nome da parte bloqueada:'); if (!n?.trim()) return;
     if (a.parts.some(p => p.name === n.trim())) return toast('Essa parte já existe nesta conta');
-    a.parts.push({ id: uid(), name: n.trim(), icon: /fgts/i.test(n) ? '🔒' : /judic/i.test(n) ? '⚖️' : '🔒' }); save(); render(); ACTIONS['parte-valor']({ dataset: { id: a.id, p: a.parts.at(-1).id, volta: '1' } }); },
+    a.parts.push({ id: uid(), name: n.trim(), icon: /fgts/i.test(n) ? '🔒' : /judic/i.test(n) ? '⚖️' : '🔒' }); saveParts(a); save(); render(); accountForm(a); setTimeout(() => { const i = [...document.querySelectorAll('.f-parte')].at(-1); i?.focus(); i?.scrollIntoView({ block: 'center' }); }, 100); },
   'parte-del': el => { const a = acc(el.dataset.id), p = a.parts.find(x => x.id === el.dataset.p);
     if (!confirm(`Remover "${p.name}" desta conta? O valor bloqueado registrado nela será apagado.`)) return;
-    S.tx = S.tx.filter(t => !(t.kind === 'ajuste' && t.sub === p.id)); a.parts = a.parts.filter(x => x !== p); save(); accountForm(a); render(); },
+    saveParts(a); S.tx = S.tx.filter(t => !(t.kind === 'ajuste' && t.sub === p.id)); a.parts = a.parts.filter(x => x !== p); save(); accountForm(a); render(); },
   'salvar-ajuste': () => {
     let n = 0;
     document.querySelectorAll('.f-saldo').forEach(i => { if (!i.value.trim()) return; const a = acc(i.dataset.acc), sub = i.dataset.sub;

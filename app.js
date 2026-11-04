@@ -51,12 +51,28 @@ function defaults() {
   };
 }
 
+const AREA_ICONS = { 'Moradia':'🏠','Alimentação':'🍽️','Lazer':'🎉','Serviços':'📺','Saúde':'💊','Pet':'🐾','Esportes':'⚽','Transporte':'🚗','Vestuário':'👕','Viagens':'✈️','Investimentos':'📈','Descontos':'🧾','Educação':'📚','Presentes e doações':'🎁','Outros':'📦' };
+const TYPE_ICONS = { 'Financiamento':'🏠','Conta de luz':'💡','Conta de água':'🚿','Internet':'🌐','Faxina':'🧹','Compras do mês':'🛒','Bebidas':'🍺','Café da manhã':'☕','Almoço':'🍛','Lanche':'🥪','Jantar':'🍝',
+  'Cinema':'🎬','Show':'🎤','Barzinho':'🍻','Jogos':'🃏','Games':'🎮','YouTube':'▶️','Crunchyroll':'🍥','Celular':'📱','iCloud':'☁️','Farmácia':'💊','Dentista':'🦷','Plano de saúde':'🩺',
+  'Petiscos':'🦴','Ração':'🥣','Brinquedos':'🧸','Veterinário':'🩺','Pet shop':'🛁','Academia':'🏋️','Pelada':'⚽','Táxi':'🚕','Uber':'🚘','99 táxi':'🚖','Ônibus':'🚌','Gasolina':'⛽','Mecânico':'🔧',
+  'Lava jato':'🧽','Troca de óleo':'🛢️','Roupas':'👕','Calçados':'👟','Passagem':'🎫','Acomodação':'🏨','Aporte':'📈','INSS':'🏛️','Contador':'🧮','Tarifas bancárias':'🏦','Cursos':'🎓','Livros':'📖','Presentes':'🎁','Doações':'🤝' };
+const INC_ICONS = { 'Salário':'💼','VR':'🍴','VT':'🚌','Freela':'💻','Investimentos':'📈' };
+const ACC_ICONS = { corrente:'🏦', dinheiro:'💵', cartao:'💳' };
+const ACC_COLORS = { sicoob:'#0b7a5c', dinheiro:'#16a34a', nubank:'#820ad1' };
+const ICON_CHOICES = ['🏠','🍽️','🛒','☕','🍛','🍔','🍕','🍺','🍻','🎉','🎬','🎤','🎮','🃏','📺','▶️','📱','☁️','💻','💊','🦷','🩺','🏥','🐾','🦴','🐶','🐱','⚽','🏋️','🚗','🚕','🚌','⛽','🔧','✈️','🏨','🎫','👕','👟','👜','💇','💄','📚','🎓','🎁','🤝','🧾','🏛️','🧮','🏦','💳','💵','💰','💼','📈','🪙','💡','🚿','🌐','🧹','🛠️','👶','❤️','⭐','📦','🏷️'];
+function migrate() {
+  for (const a of S.areas) { a.icon = a.icon || AREA_ICONS[a.name] || '🏷️'; for (const t of a.types) if (t.icon === undefined) t.icon = TYPE_ICONS[t.name] || ''; }
+  for (const a of S.accounts) { a.icon = a.icon || ACC_ICONS[a.type] || '🏦'; a.color = a.color || ACC_COLORS[a.id] || '#64748b'; }
+  for (const c of S.incomeCats) c.icon = c.icon || INC_ICONS[c.name] || '💰';
+}
+
 let S;
 function load() {
   try { S = JSON.parse(localStorage.getItem(KEY)); } catch (e) { S = null; }
   if (!S || !S.version) S = defaults();
   for (const k of ['tx','fixed','goals','investments']) S[k] = S[k] || [];
   S.generated = S.generated || {};
+  migrate();
 }
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); }
@@ -89,6 +105,9 @@ const area = id => S.areas.find(a => a.id === id);
 const typeName = (aId, tId) => area(aId)?.types.find(t => t.id === tId)?.name || '';
 const incomeCat = id => S.incomeCats.find(c => c.id === id);
 const taxRate = () => S.taxes.reduce((s, t) => s + (+t.rate || 0), 0);
+const typeOf = (aId, tId) => area(aId)?.types.find(t => t.id === tId);
+const av = (icon, color) => `<span class="av" style="background:${color}33;border-color:${color}">${icon || '•'}</span>`;
+const accTag = a => a ? `<span class="acc" style="color:${a.color}">${a.icon} ${esc(a.name)}</span>` : '';
 const sum = (arr, f) => arr.reduce((s, x) => s + (f(x) || 0), 0);
 
 function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.classList.remove('hidden'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hidden'), 2200); }
@@ -154,25 +173,25 @@ function txRow(t) {
   let left, right, cls = 'neg', badges = '';
   if (t.kind === 'despesa') {
     const a = area(t.areaId);
-    left = `<span class="dot" style="background:${a?.color || '#ccc'}"></span>`;
+    left = av(typeOf(t.areaId, t.typeId)?.icon || a?.icon, a?.color || '#94a3b8');
     const label = t.desc || typeName(t.areaId, t.typeId) || a?.name || 'Despesa';
     const parc = t.inst ? ` ${t.inst.n}/${t.inst.total}` : '';
     if (acc(t.accountId)?.type === 'cartao') badges += `<span class="badge card">${t.paid ? 'fatura paga' : 'fatura'}</span> `;
     else if (!t.paid) badges += `<span class="badge pend">pendente</span> `;
     return `<div class="row" data-action="editar" data-id="${t.id}">${left}<div class="l"><div class="t">${esc(label)}${parc}</div>
-      <div class="sub">${fmtDate(t.date)} · ${esc(a?.name || '')}${t.typeId ? ' › ' + esc(typeName(t.areaId, t.typeId)) : ''} · ${esc(acc(t.accountId)?.name || '')}</div></div>
+      <div class="sub">${fmtDate(t.date)} · ${esc(a?.name || '')}${t.typeId ? ' › ' + esc(typeName(t.areaId, t.typeId)) : ''}</div><div class="sub">${accTag(acc(t.accountId))}</div></div>
       <div style="text-align:right"><div class="${cls}">-${money(t.amount)}</div>${badges}</div></div>`;
   }
   if (t.kind === 'receita') {
-    return `<div class="row" data-action="editar" data-id="${t.id}"><span class="dot" style="background:var(--green)"></span><div class="l"><div class="t">${esc(t.desc || incomeCat(t.catId)?.name || 'Receita')}</div>
-      <div class="sub">${fmtDate(t.date)} · ${esc(incomeCat(t.catId)?.name || '')} · ${esc(acc(t.accountId)?.name || '')}${t.gross !== t.net ? ' · bruto ' + money(t.gross) : ''}</div></div>
+    return `<div class="row" data-action="editar" data-id="${t.id}">${av(incomeCat(t.catId)?.icon || '💰', '#16a34a')}<div class="l"><div class="t">${esc(t.desc || incomeCat(t.catId)?.name || 'Receita')}</div>
+      <div class="sub">${fmtDate(t.date)} · ${esc(incomeCat(t.catId)?.name || '')}${t.gross !== t.net ? ' · bruto ' + money(t.gross) : ''}</div><div class="sub">${accTag(acc(t.accountId))}</div></div>
       <div class="pos">+${money(t.net)}</div></div>`;
   }
   if (t.kind === 'transferencia') {
-    return `<div class="row" data-action="editar" data-id="${t.id}"><span class="dot" style="background:var(--muted)"></span><div class="l"><div class="t">${esc(t.desc || 'Transferência')}</div>
+    return `<div class="row" data-action="editar" data-id="${t.id}">${av('🔄', '#64748b')}<div class="l"><div class="t">${esc(t.desc || 'Transferência')}</div>
       <div class="sub">${fmtDate(t.date)} · ${esc(acc(t.from)?.name)} → ${esc(acc(t.to)?.name)}</div></div><div class="sub">${money(t.amount)}</div></div>`;
   }
-  return `<div class="row" data-action="editar" data-id="${t.id}"><span class="dot" style="background:#8b5cf6"></span><div class="l"><div class="t">Pagamento de fatura</div>
+  return `<div class="row" data-action="editar" data-id="${t.id}">${av('✅', acc(t.cardId)?.color || '#8b5cf6')}<div class="l"><div class="t">Pagamento de fatura</div>
     <div class="sub">${fmtDate(t.date)} · ${esc(acc(t.cardId)?.name)} · de ${esc(acc(t.accountId)?.name)}</div></div><div class="sub">${money(t.amount)}</div></div>`;
 }
 
@@ -189,7 +208,7 @@ VIEWS.inicio = () => {
   const mk = mkOf(today()), s = monthSummary(mk);
   const accs = S.accounts.filter(a => !a.archived);
   let h = `<div class="card"><h2>Patrimônio</h2><div class="big">${money(patrimonio())}</div>
-    ${accs.map(a => `<div class="row"><div class="l">${esc(a.name)}</div><div class="${balance(a) < 0 ? 'neg' : ''}">${money(balance(a))}</div></div>`).join('')}</div>`;
+    ${accs.map(a => `<div class="row">${av(a.icon, a.color)}<div class="l">${esc(a.name)}</div><div class="${balance(a) < 0 ? 'neg' : ''}">${money(balance(a))}</div></div>`).join('')}</div>`;
   h += `<div class="card"><h2>${monthName(mk)}</h2><div class="grid3">
     <div><span class="sub">Receita líquida</span><b class="pos">${money(s.liquido)}</b></div>
     <div><span class="sub">Despesas</span><b class="neg">${money(s.despesas)}</b></div>
@@ -200,7 +219,7 @@ VIEWS.inicio = () => {
     const cur = billKey({ accountId: card.id, date: today() });
     const bills = billsOf(card).filter(b => b.open > 0.004 && b.key <= cur);
     const next = sum(billsOf(card).filter(b => b.key > cur), b => b.open);
-    h += `<div class="card"><h2>${esc(card.name)}</h2>`;
+    h += `<div class="card" style="border-left:4px solid ${card.color}"><h2>${card.icon} ${esc(card.name)}</h2>`;
     if (!bills.length) h += `<div class="sub">Nenhuma fatura em aberto.</div>`;
     for (const b of bills) {
       h += `<div class="row"><div class="l"><div>Fatura de ${monthName(b.key)}</div><div class="sub">${b.key === cur ? 'aberta, fecha dia ' + card.closeDay : 'fechada'} · vence ${fmtDate(dueDate(card, b.key))}</div></div>
@@ -224,7 +243,7 @@ function budgetBlock(mk, onlyBudgeted) {
   if (!rows.length) return onlyBudgeted ? '' : `<div class="empty">Nenhum gasto neste mês.</div>`;
   return rows.map(({ a, spent }) => {
     const pct = a.budget ? Math.min(100, spent / a.budget * 100) : 0;
-    return `<div style="margin:10px 0"><div style="display:flex;justify-content:space-between"><span><span class="dot" style="background:${a.color}"></span>${esc(a.name)}</span>
+    return `<div style="margin:10px 0"><div style="display:flex;justify-content:space-between"><span>${a.icon} ${esc(a.name)}</span>
       <span class="${a.budget && spent > a.budget ? 'neg' : ''}">${money(spent)}${a.budget ? ' <span class="sub">de ' + money(a.budget) + '</span>' : ''}</span></div>
       ${a.budget ? `<div class="bar ${spent > a.budget ? 'over' : ''}"><i style="width:${pct}%"></i></div>` : ''}</div>`;
   }).join('');
@@ -252,8 +271,8 @@ VIEWS.fixos = () => {
   const rows = S.fixed.map(f => {
     const t = S.tx.find(x => x.fixedId === f.id && mkOf(x.date) === mk);
     const st = !f.active ? '<span class="badge">pausado</span>' : t ? (t.paid || acc(t.accountId)?.type === 'cartao' ? '<span class="badge">lançado</span>' : '<span class="badge pend">pendente</span>') : '';
-    return `<div class="row" data-action="fixo" data-id="${f.id}"><span class="dot" style="background:${area(f.areaId)?.color || '#ccc'}"></span>
-      <div class="l"><div class="t">${esc(f.desc)}</div><div class="sub">todo dia ${f.day} · ${esc(acc(f.accountId)?.name || '')}</div></div>
+    return `<div class="row" data-action="fixo" data-id="${f.id}">${av(typeOf(f.areaId, f.typeId)?.icon || area(f.areaId)?.icon, area(f.areaId)?.color || '#94a3b8')}
+      <div class="l"><div class="t">${esc(f.desc)}</div><div class="sub">todo dia ${f.day} · ${accTag(acc(f.accountId))}</div></div>
       <div style="text-align:right">${money(f.amount)}<br>${st}</div></div>`;
   }).join('');
   const total = sum(S.fixed.filter(f => f.active), f => f.amount);
@@ -325,28 +344,27 @@ let sub_card = null;
 
 VIEWS.ajustes = () => {
   const areas = S.areas.map((a, i) => `<div class="card"><div style="display:flex;align-items:center;gap:8px">
-      <input type="color" value="${a.color}" data-change="area-cor" data-id="${a.id}" style="width:38px;height:34px;padding:2px">
-      <b style="flex:1">${esc(a.name)}</b>
+      ${av(a.icon, a.color)}<b style="flex:1">${esc(a.name)}</b>
       <button class="icon-btn" data-action="area-up" data-id="${a.id}" ${i ? '' : 'disabled'}>↑</button>
-      <button class="icon-btn" data-action="area-ren" data-id="${a.id}">✎</button>
+      <button class="icon-btn" data-action="area-edit" data-id="${a.id}">✎</button>
       <button class="icon-btn" data-action="area-del" data-id="${a.id}">🗑</button></div>
     <label>Orçamento mensal (opcional)</label><input inputmode="decimal" placeholder="R$ 0,00" value="${moneyInput(a.budget)}" data-change="area-orc" data-id="${a.id}">
-    <div class="chips">${a.types.map(t => `<span class="chip">${esc(t.name)}<button data-action="tipo-del" data-id="${a.id}" data-t="${t.id}">×</button></span>`).join('')}
+    <div class="chips">${a.types.map(t => `<span class="chip" data-action="tipo-edit" data-id="${a.id}" data-t="${t.id}">${t.icon ? t.icon + ' ' : ''}${esc(t.name)}<button data-action="tipo-del" data-id="${a.id}" data-t="${t.id}">×</button></span>`).join('')}
       <button class="btn small sec" data-action="tipo-add" data-id="${a.id}">+ tipo</button></div></div>`).join('');
-  const accs = S.accounts.map(a => `<div class="row" data-action="conta" data-id="${a.id}"><div class="l"><div>${esc(a.name)}${a.archived ? ' <span class="badge">arquivada</span>' : ''}</div>
+  const accs = S.accounts.map(a => `<div class="row" data-action="conta" data-id="${a.id}">${av(a.icon, a.color)}<div class="l"><div>${esc(a.name)}${a.archived ? ' <span class="badge">arquivada</span>' : ''}</div>
     <div class="sub">${{ corrente: 'Conta', dinheiro: 'Dinheiro', cartao: 'Cartão de crédito' }[a.type]} · saldo inicial ${money(a.initial)}</div></div><span class="sub">›</span></div>`).join('');
-  const inc = S.incomeCats.map(c => `<div class="row"><div class="l">${esc(c.name)}</div>
+  const inc = S.incomeCats.map(c => `<div class="row"><span data-action="inc-edit" data-id="${c.id}" style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer">${av(c.icon, '#16a34a')}${esc(c.name)} <span class="sub">✎</span></span>
     <label class="check" style="margin:0;font-size:13px"><input type="checkbox" data-change="inc-tax" data-id="${c.id}" ${c.taxed ? 'checked' : ''}>com nota</label>
     <button class="icon-btn" data-action="inc-del" data-id="${c.id}">🗑</button></div>`).join('');
   const tx = S.taxes.map(t => `<div class="row"><div class="l">${esc(t.name)}</div><input style="width:90px;text-align:right" inputmode="decimal" value="${String(t.rate).replace('.', ',')}" data-change="tax-rate" data-id="${t.id}"> %
     <button class="icon-btn" data-action="tax-del" data-id="${t.id}">🗑</button></div>`).join('');
   return `<div class="card"><h2>Privacidade</h2><p class="sub">${pinSet() ? 'O app pede senha ao abrir e depois de 1 minuto em segundo plano.' : 'Sem senha. Qualquer pessoa com seu celular desbloqueado consegue abrir o app.'}</p>
     ${pinSet() ? '<button class="btn full sec" data-action="pin-set">Trocar senha</button><button class="btn full danger" data-action="pin-off">Desativar senha</button>' : '<button class="btn full" data-action="pin-set">Ativar senha</button>'}</div>
-  <div class="card"><h2>Contas</h2>${accs}<button class="btn full sec" data-action="conta">+ Nova conta ou cartão</button></div>
+  <div class="card"><h2>Contas</h2><p class="hint" style="margin-top:0">Toque numa conta para mudar o ícone e a cor.</p>${accs}<button class="btn full sec" data-action="conta">+ Nova conta ou cartão</button></div>
   <div class="card"><h2>Impostos da nota (PJ)</h2>${tx}<div class="row"><b>Total</b><b>${taxRate().toFixed(2).replace('.', ',')} %</b></div>
     <button class="btn full sec" data-action="tax-add">+ Imposto</button><p class="hint">Receitas marcadas "com nota" têm esse percentual descontado do valor bruto.</p></div>
   <div class="card"><h2>Tipos de receita</h2>${inc}<button class="btn full sec" data-action="inc-add">+ Tipo de receita</button></div>
-  <h2 style="font-size:15px;color:var(--muted);margin:18px 0 0">ÁREAS DE GASTO</h2>${areas}
+  <h2 style="font-size:15px;color:var(--muted);margin:18px 0 0">ÁREAS DE GASTO</h2><p class="hint">Toque em ✎ para mudar nome, ícone e cor da área. Toque num tipo para escolher o ícone dele.</p>${areas}
   <button class="btn full sec" data-action="area-add">+ Nova área</button>
   <div class="card"><h2>Backup</h2><p class="sub">Os dados ficam só neste aparelho. Faça um backup de vez em quando.</p>
     <button class="btn full" data-action="exportar">Baixar backup (JSON)</button>
@@ -509,10 +527,35 @@ function investForm(i = null) {
     <button class="btn full" data-action="salvar-invest">Salvar</button>${i.id ? '<button class="btn full danger" data-action="excluir-invest">Excluir</button>' : ''}
     <button class="btn full sec" data-action="fechar">Cancelar</button>`);
 }
+const SWATCHES = ['#820ad1','#0b7a5c','#ff7a00','#ec7000','#cc092f','#005ca9','#fcd116','#1f2937','#16a34a','#0ea5e9','#6366f1','#ec4899','#f59e0b','#a16207','#64748b','#14b8a6'];
+// Bloco de escolha de ícone (e cor, opcional) usado nos formulários
+function lookFields(icon, color, withColor = true, withIcon = true) {
+  return `<div class="look"><span id="look-prev">${av(icon, color || '#94a3b8')}</span><span class="sub">Prévia</span></div>
+    <input type="hidden" id="f-icon" value="${esc(icon || '')}"><input type="hidden" id="f-cor" value="${color || '#94a3b8'}">
+    ${withColor ? `<label>Cor</label><div class="swatches">${[...new Set([color, ...SWATCHES, ...COLORS].filter(Boolean))].map(c => `<button type="button" class="sw ${c === color ? 'on' : ''}" style="background:${c}" data-action="pick-cor" data-v="${c}"></button>`).join('')}
+      <label class="sw custom" title="Outra cor"><input type="color" value="${color || '#94a3b8'}" data-change="pick-cor-custom">🎨</label></div>` : ''}
+    ${withIcon ? `<label>Ícone</label><div class="icongrid">${ICON_CHOICES.map(i => `<button type="button" class="${i === icon ? 'on' : ''}" data-action="pick-icon" data-v="${i}">${i}</button>`).join('')}</div>
+    <input id="f-icon-txt" placeholder="Ou digite/cole outro emoji" maxlength="4" data-input="icon-txt" style="margin-top:8px">` : ''}`;
+}
+function updLook() { document.getElementById('look-prev').innerHTML = av(val('f-icon'), val('f-cor')); }
+
+// Editar área, tipo ou tipo de receita
+function itemForm(kind, aId, tId) {
+  const it = kind === 'area' ? area(aId) : kind === 'tipo' ? typeOf(aId, tId) : incomeCat(aId);
+  const color = kind === 'area' ? it.color : kind === 'tipo' ? area(aId).color : '#16a34a';
+  form = { kind: 'item-' + kind, aId, tId };
+  openSheet(`<h3>${{ area: 'Editar área', tipo: 'Editar tipo de gasto', inc: 'Editar tipo de receita' }[kind]}</h3>
+    <label>Nome</label><input id="f-nome" value="${esc(it.name)}">
+    ${lookFields(it.icon || (kind === 'tipo' ? area(aId).icon : ''), color, kind === 'area')}
+    ${kind === 'tipo' ? '<p class="hint">A cor vem da área. Sem ícone próprio, o tipo usa o ícone da área.</p><button class="btn full sec" data-action="tipo-sem-icone">Usar o ícone da área</button>' : ''}
+    <button class="btn full" data-action="salvar-item">Salvar</button><button class="btn full sec" data-action="fechar">Cancelar</button>`);
+}
+
 function accountForm(a = null) {
   form = { kind: 'conta', id: a?.id }; a = a || { type: 'corrente' };
   openSheet(`<h3>${a.id ? 'Editar conta' : 'Nova conta'}</h3>
     <label>Nome</label><input id="f-nome" value="${esc(a.name)}">
+    ${lookFields(a.icon || ACC_ICONS[a.type], a.color || '#64748b')}
     <label>Tipo</label><select id="f-tipo" ${a.id ? 'disabled' : ''}>${opt('corrente', 'Conta bancária', a.type)}${opt('dinheiro', 'Dinheiro', a.type)}${opt('cartao', 'Cartão de crédito', a.type)}</select>
     <label>${a.type === 'cartao' ? 'Saldo inicial (use negativo se já houver fatura)' : 'Saldo inicial'}</label><input id="f-ini" inputmode="decimal" value="${a.initial ? String(a.initial).replace('.', ',') : ''}" placeholder="0,00">
     <div class="two"><div><label>Fecha dia (cartão)</label><input id="f-fecha" type="number" min="1" max="31" value="${a.closeDay || ''}"></div>
@@ -551,18 +594,30 @@ const ACTIONS = {
   'excluir-invest': () => { if (!confirm('Excluir investimento?')) return; S.investments = S.investments.filter(i => i.id !== form.id); save(); closeSheet(); render(); },
   conta: el => accountForm(acc(el.dataset.id)),
   'salvar-conta': () => { const name = val('f-nome').trim(); if (!name) return toast('Dê um nome');
-    const o = { name, initial: parseMoney(val('f-ini')) * (String(val('f-ini')).trim().startsWith('-') ? -1 : 1), closeDay: parseInt(val('f-fecha')) || undefined, dueDay: parseInt(val('f-vence')) || undefined };
+    const o = { name, icon: val('f-icon') || '🏦', color: val('f-cor'), initial: parseMoney(val('f-ini')) * (String(val('f-ini')).trim().startsWith('-') ? -1 : 1), closeDay: parseInt(val('f-fecha')) || undefined, dueDay: parseInt(val('f-vence')) || undefined };
     if (form.id) Object.assign(acc(form.id), o, { archived: document.getElementById('f-arq').checked });
     else { const type = val('f-tipo'); if (type === 'cartao' && (!o.closeDay || !o.dueDay)) return toast('Informe os dias de fechamento e vencimento'); S.accounts.push({ id: uid(), type, ...o }); }
     save(); closeSheet(); render(); },
-  'area-add': () => { const n = prompt('Nome da nova área:'); if (!n?.trim()) return; S.areas.push({ id: uid(), name: n.trim(), color: COLORS[S.areas.length % COLORS.length], budget: 0, types: [] }); save(); render(); },
+  'pick-icon': el => { document.getElementById('f-icon').value = el.dataset.v; document.querySelectorAll('.icongrid .on').forEach(b => b.classList.remove('on')); el.classList.add('on'); updLook(); },
+  'pick-cor': el => { document.getElementById('f-cor').value = el.dataset.v; document.querySelectorAll('.swatches .on').forEach(b => b.classList.remove('on')); el.classList.add('on'); updLook(); },
+  'area-edit': el => itemForm('area', el.dataset.id),
+  'tipo-edit': (el, e) => itemForm('tipo', el.dataset.id, el.dataset.t),
+  'inc-edit': el => itemForm('inc', el.dataset.id),
+  'tipo-sem-icone': () => { document.getElementById('f-icon').value = ''; updLook(); },
+  'salvar-item': () => {
+    const name = val('f-nome').trim(); if (!name) return toast('Dê um nome');
+    const k = form.kind.slice(5), it = k === 'area' ? area(form.aId) : k === 'tipo' ? typeOf(form.aId, form.tId) : incomeCat(form.aId);
+    it.name = name; it.icon = val('f-icon') || (k === 'tipo' ? '' : it.icon); if (k === 'area') it.color = val('f-cor');
+    save(); closeSheet(); render(); toast('Salvo');
+  },
+  'area-add': () => { const n = prompt('Nome da nova área:'); if (!n?.trim()) return; S.areas.push({ id: uid(), name: n.trim(), icon: '🏷️', color: COLORS[S.areas.length % COLORS.length], budget: 0, types: [] }); save(); render(); },
   'area-ren': el => { const a = area(el.dataset.id); const n = prompt('Novo nome:', a.name); if (n?.trim()) { a.name = n.trim(); save(); render(); } },
   'area-del': el => { const a = area(el.dataset.id); const used = S.tx.some(t => t.areaId === a.id) || S.fixed.some(f => f.areaId === a.id);
     if (used) return alert('Essa área tem lançamentos ou gastos fixos. Mude-os de área antes de excluir.'); if (!confirm(`Excluir a área ${a.name}?`)) return; S.areas = S.areas.filter(x => x !== a); save(); render(); },
   'area-up': el => { const i = S.areas.findIndex(a => a.id === el.dataset.id); if (i > 0) { [S.areas[i - 1], S.areas[i]] = [S.areas[i], S.areas[i - 1]]; save(); render(); } },
-  'tipo-add': el => { const n = prompt('Nome do novo tipo:'); if (!n?.trim()) return; area(el.dataset.id).types.push({ id: uid(), name: n.trim() }); save(); render(); },
+  'tipo-add': el => { const n = prompt('Nome do novo tipo:'); if (!n?.trim()) return; area(el.dataset.id).types.push({ id: uid(), name: n.trim(), icon: TYPE_ICONS[n.trim()] || '' }); save(); render(); },
   'tipo-del': el => { const a = area(el.dataset.id); a.types = a.types.filter(t => t.id !== el.dataset.t); save(); render(); toast('Tipo removido (lançamentos antigos continuam)'); },
-  'inc-add': () => { const n = prompt('Nome do tipo de receita:'); if (!n?.trim()) return; S.incomeCats.push({ id: uid(), name: n.trim(), taxed: false }); save(); render(); },
+  'inc-add': () => { const n = prompt('Nome do tipo de receita:'); if (!n?.trim()) return; S.incomeCats.push({ id: uid(), name: n.trim(), icon: '💰', taxed: false }); save(); render(); },
   'inc-del': el => { if (S.tx.some(t => t.catId === el.dataset.id)) return alert('Esse tipo já tem receitas lançadas.'); S.incomeCats = S.incomeCats.filter(c => c.id !== el.dataset.id); save(); render(); },
   'tax-add': () => { const n = prompt('Nome do imposto:'); if (!n?.trim()) return; S.taxes.push({ id: uid(), name: n.trim(), rate: 0 }); save(); render(); },
   'tax-del': el => { S.taxes = S.taxes.filter(t => t.id !== el.dataset.id); save(); render(); },
@@ -595,6 +650,7 @@ const CHANGES = {
   'conta-form': () => syncForm(),
   'cat-form': el => { document.getElementById('f-nota').checked = !!incomeCat(el.value)?.taxed; syncForm(); },
   preview: () => syncForm(),
+  'pick-cor-custom': el => { document.getElementById('f-cor').value = el.value; updLook(); },
   'area-cor': el => { area(el.dataset.id).color = el.value; save(); },
   'area-orc': el => { area(el.dataset.id).budget = parseMoney(el.value); save(); },
   'inc-tax': el => { incomeCat(el.dataset.id).taxed = el.checked; save(); },
@@ -608,7 +664,10 @@ document.addEventListener('click', e => {
   ACTIONS[el.dataset.action]?.(el);
 });
 document.addEventListener('change', e => { const el = e.target.closest('[data-change]'); if (el) CHANGES[el.dataset.change]?.(el); });
-document.addEventListener('input', e => { if (e.target.dataset.input === 'preview') syncForm(); });
+document.addEventListener('input', e => {
+  if (e.target.dataset.input === 'preview') syncForm();
+  if (e.target.dataset.input === 'icon-txt' && e.target.value.trim()) { document.getElementById('f-icon').value = e.target.value.trim(); updLook(); }
+});
 
 /* ===================== Senha (PIN) ===================== */
 const PIN_KEY = 'financas.pin';
